@@ -10,7 +10,7 @@ const Dashboard = () => {
   const goalProgress = useAppStore((state) => state.goalProgress)
   const streakData = useAppStore((state) => state.streakData)
   const categoryStats = useAppStore((state) => state.categoryStats)
-  
+
   const [showTimeEntryModal, setShowTimeEntryModal] = useState(false)
 
   // Get current week's date range for filtering data
@@ -18,10 +18,10 @@ const Dashboard = () => {
     const today = new Date()
     const firstDay = new Date(today)
     const lastDay = new Date(today)
-    
+
     firstDay.setDate(today.getDate() - today.getDay())
     lastDay.setDate(today.getDate() + (6 - today.getDay()))
-    
+
     return {
       start: firstDay.toISOString().split('T')[0],
       end: lastDay.toISOString().split('T')[0]
@@ -29,12 +29,12 @@ const Dashboard = () => {
   }
 
   const weekRange = getCurrentWeekRange()
-  
+
   // Filter existing data for current week instead of refetching
-  const timeEntriesThisWeek = timeEntries.filter(entry => 
+  const timeEntriesThisWeek = timeEntries.filter(entry =>
     entry.date >= weekRange.start && entry.date <= weekRange.end
   )
-  
+
   const categoryStatsThisWeek = categoryStats.map(stat => ({
     ...stat,
     // Since categoryStats might be from a different period, we'll calculate week stats from timeEntries
@@ -67,10 +67,10 @@ const Dashboard = () => {
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
           <p className="text-gray-600 dark:text-gray-400 mt-1">
-            Welcome back! Here's your productivity overview.
+            Welcome back beta Yasir! Your productivity overview.
           </p>
         </div>
-        
+
         <button
           onClick={() => setShowTimeEntryModal(true)}
           className="flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors"
@@ -158,7 +158,7 @@ const Dashboard = () => {
               <div className="space-y-4">
                 {recentTimeEntries.map((entry) => (
                   <div key={entry.id} className="flex items-center gap-4">
-                    <div 
+                    <div
                       className="w-3 h-3 rounded-full flex-shrink-0"
                       style={{ backgroundColor: entry.category_color }}
                     />
@@ -171,7 +171,7 @@ const Dashboard = () => {
                       </p>
                     </div>
                     <div className="text-sm text-gray-600 dark:text-gray-400">
-                      {entry.description && entry.description.length > 30 
+                      {entry.description && entry.description.length > 30
                         ? `${entry.description.substring(0, 30)}...`
                         : entry.description || 'No description'
                       }
@@ -202,7 +202,7 @@ const Dashboard = () => {
                   .sort((a, b) => b.total_hours - a.total_hours)
                   .map((stat) => (
                     <div key={stat.id} className="flex items-center gap-4">
-                      <div 
+                      <div
                         className="w-3 h-3 rounded-full flex-shrink-0"
                         style={{ backgroundColor: stat.color }}
                       />
@@ -217,9 +217,9 @@ const Dashboard = () => {
                         </div>
                         <div className="mt-1">
                           <div className="bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                            <div 
+                            <div
                               className="h-2 rounded-full"
-                              style={{ 
+                              style={{
                                 backgroundColor: stat.color,
                                 width: `${Math.min((stat.total_hours / Math.max(totalHoursThisWeek, 1)) * 100, 100)}%`
                               }}

@@ -93,6 +93,7 @@ const Sidebar = () => {
         
         <div className="mt-3 text-center text-xs text-gray-500 dark:text-gray-400">
           Total Active Days: {streakData.totalActiveDays}
+          <p><a href="https://linkedin.com/in/adnanalisde" target='_blank'>Made with ❤️ by Adnan Ali</a></p>
         </div>
       </div>
     </div>
