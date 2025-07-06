@@ -1,0 +1,54 @@
+@import "tailwindcss";
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1f2937;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #4b5563;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
+}
+
+/* Calendar styling */
+.react-calendar {
+  background-color: white;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+.react-calendar__tile {
+  padding: 0.5rem;
+  text-align: center;
+  transition: background-color 0.3s;
+}
+
+.react-calendar__tile:hover {
+  background-color: #dbeafe;
+}
+
+.react-calendar__tile--active {
+  background-color: #3b82f6;
+  color: white;
+}
+
+.react-calendar__tile--now {
+  background-color: #dbeafe;
+}
+
+.react-calendar__navigation button {
+  color: #2563eb;
+}
+
+.react-calendar__navigation button:hover {
+  background-color: #eff6ff;
+}
