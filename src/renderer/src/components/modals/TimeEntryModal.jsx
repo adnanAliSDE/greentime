@@ -3,11 +3,11 @@ import { useAppStore, useDateStore } from '../../store/appStore'
 import { X, Clock, Calendar, FileText } from 'lucide-react'
 
 const TimeEntryModal = ({ isOpen, onClose, entryToEdit = null }) => {
-  const { categories, createTimeEntry, updateTimeEntry } = useAppStore()
+  const { categories, createTimeEntry, updateTimeEntry, selectedDate } = useAppStore()
   const { formatDateForInput } = useDateStore()
   
   const [formData, setFormData] = useState({
-    date: formatDateForInput(new Date()),
+    date: formatDateForInput(selectedDate || new Date()),
     categoryId: '',
     hours: '',
     minutes: '',
@@ -25,15 +25,17 @@ const TimeEntryModal = ({ isOpen, onClose, entryToEdit = null }) => {
         description: entryToEdit.description || ''
       })
     } else {
+      const dateToUse = selectedDate || new Date();
+      console.log('TimeEntryModal: selectedDate:', selectedDate, 'dateToUse:', dateToUse, 'formatted:', formatDateForInput(dateToUse))
       setFormData({
-        date: formatDateForInput(new Date()),
+        date: formatDateForInput(dateToUse),
         categoryId: categories.length > 0 ? categories[0].id.toString() : '',
         hours: '',
         minutes: '',
         description: ''
       })
     }
-  }, [entryToEdit, categories, formatDateForInput])
+  }, [entryToEdit, categories, selectedDate, formatDateForInput])
 
   const handleSubmit = async (e) => {
     e.preventDefault()

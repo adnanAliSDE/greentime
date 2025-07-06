@@ -33,9 +33,24 @@ class DatabaseService {
         name TEXT NOT NULL UNIQUE,
         description TEXT,
         color TEXT DEFAULT '#3B82F6',
+        is_system_category BOOLEAN DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // Check if is_system_category column exists, add it if not (migration)
+    try {
+      const columns = this.db.prepare("PRAGMA table_info(categories)").all();
+      const hasSystemColumn = columns.some(col => col.name === 'is_system_category');
+      
+      if (!hasSystemColumn) {
+        console.log('main::index.js::DataBaseService::Adding is_system_category column...');
+        this.db.exec("ALTER TABLE categories ADD COLUMN is_system_category BOOLEAN DEFAULT 0");
+        console.log('main::index.js::DataBaseService::is_system_category column added successfully');
+      }
+    } catch (error) {
+      console.error('main::index.js::DataBaseService::Migration error:', error);
+    }
 
     // Goals table
     this.db.exec(`
@@ -46,9 +61,32 @@ class DatabaseService {
         start_date DATE,
         end_date DATE,
         is_active BOOLEAN DEFAULT 1,
+        is_completed BOOLEAN DEFAULT 0,
+        completed_at DATETIME,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // Check if is_completed column exists, add it if not (migration)
+    try {
+      const columns = this.db.prepare("PRAGMA table_info(goals)").all();
+      const hasCompletedColumn = columns.some(col => col.name === 'is_completed');
+      const hasCompletedAtColumn = columns.some(col => col.name === 'completed_at');
+      
+      if (!hasCompletedColumn) {
+        console.log('main::index.js::DataBaseService::Adding is_completed column to goals...');
+        this.db.exec("ALTER TABLE goals ADD COLUMN is_completed BOOLEAN DEFAULT 0");
+        console.log('main::index.js::DataBaseService::is_completed column added successfully');
+      }
+      
+      if (!hasCompletedAtColumn) {
+        console.log('main::index.js::DataBaseService::Adding completed_at column to goals...');
+        this.db.exec("ALTER TABLE goals ADD COLUMN completed_at DATETIME");
+        console.log('main::index.js::DataBaseService::completed_at column added successfully');
+      }
+    } catch (error) {
+      console.error('main::index.js::DataBaseService::Goals migration error:', error);
+    }
 
     // Goal targets table
     this.db.exec(`
@@ -83,18 +121,28 @@ class DatabaseService {
 
   insertDefaultCategories() {
     const defaultCategories = [
-      { name: 'Coding', description: 'Programming and software development', color: '#10B981' },
-      { name: 'Study', description: 'Learning and educational activities', color: '#3B82F6' },
-      { name: 'Work', description: 'Professional work activities', color: '#F59E0B' },
-      { name: 'Exercise', description: 'Physical fitness and health', color: '#EF4444' },
-      { name: 'Time Waste', description: 'Unproductive activities', color: '#6B7280' }
+      { name: 'Coding', description: 'Programming and software development', color: '#10B981', isSystem: false },
+      { name: 'Study', description: 'Learning and educational activities', color: '#3B82F6', isSystem: false },
+      { name: 'Work', description: 'Professional work activities', color: '#F59E0B', isSystem: false },
+      { name: 'Exercise', description: 'Physical fitness and health', color: '#EF4444', isSystem: false },
+      { name: 'Time Waste', description: 'Unproductive activities', color: '#EF4444', isSystem: true }
     ];
 
     const existingCategories = this.getCategories();
     if (existingCategories.length === 0) {
       defaultCategories.forEach(category => {
-        this.createCategory(category.name, category.description, category.color);
+        this.createCategory(category.name, category.description, category.color, category.isSystem);
       });
+    } else {
+      // Check if Time Waste category exists and update it to be a system category
+      const timeWasteCategory = existingCategories.find(cat => cat.name === 'Time Waste');
+      if (timeWasteCategory && !timeWasteCategory.is_system_category) {
+        this.db.prepare('UPDATE categories SET is_system_category = 1, color = ? WHERE name = ?')
+          .run('#EF4444', 'Time Waste');
+      } else if (!timeWasteCategory) {
+        // If Time Waste doesn't exist, create it as a system category
+        this.createCategory('Time Waste', 'Unproductive activities', '#EF4444', true);
+      }
     }
   }
 
@@ -102,27 +150,39 @@ class DatabaseService {
     return this.db.prepare('SELECT * FROM categories ORDER BY name').all();
   }
 
-  createCategory(name, description = '', color = '#3B82F6') {
-    return this.db.prepare('INSERT INTO categories (name, description, color) VALUES (?, ?, ?)')
-      .run(name, description, color);
+  createCategory(name, description = '', color = '#3B82F6', isSystemCategory = false) {
+    return this.db.prepare('INSERT INTO categories (name, description, color, is_system_category) VALUES (?, ?, ?, ?)')
+      .run(name, description, color, isSystemCategory ? 1 : 0);
   }
 
   updateCategory(id, name, description, color) {
+    // Prevent updating system categories
+    const category = this.db.prepare('SELECT is_system_category FROM categories WHERE id = ?').get(id);
+    if (category && category.is_system_category) {
+      throw new Error('Cannot modify system categories');
+    }
     return this.db.prepare('UPDATE categories SET name = ?, description = ?, color = ? WHERE id = ?')
       .run(name, description, color, id);
   }
 
   deleteCategory(id) {
+    // Prevent deleting system categories
+    const category = this.db.prepare('SELECT is_system_category FROM categories WHERE id = ?').get(id);
+    if (category && category.is_system_category) {
+      throw new Error('Cannot delete system categories');
+    }
     return this.db.prepare('DELETE FROM categories WHERE id = ?').run(id);
   }
 
-  getGoals() {
-    // First get all goals
-    const goals = this.db.prepare(`
-      SELECT * FROM goals 
-      WHERE is_active = 1
-      ORDER BY created_at DESC
-    `).all();
+  getGoals(includeCompleted = false) {
+    // First get all goals (active and optionally completed)
+    let query = `SELECT * FROM goals WHERE is_active = 1`;
+    if (!includeCompleted) {
+      query += ` AND is_completed = 0`;
+    }
+    query += ` ORDER BY is_completed ASC, created_at DESC`;
+    
+    const goals = this.db.prepare(query).all();
 
     // Then get targets for each goal separately
     const getTargetsStmt = this.db.prepare(`
@@ -167,6 +227,41 @@ class DatabaseService {
 
   deleteGoal(id) {
     return this.db.prepare('UPDATE goals SET is_active = 0 WHERE id = ?').run(id);
+  }
+
+  markGoalAsCompleted(id) {
+    return this.db.prepare('UPDATE goals SET is_completed = 1, completed_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+  }
+
+  markGoalAsIncomplete(id) {
+    return this.db.prepare('UPDATE goals SET is_completed = 0, completed_at = NULL WHERE id = ?').run(id);
+  }
+
+  getCompletedGoals() {
+    // Get completed goals with their targets
+    const goals = this.db.prepare(`
+      SELECT * FROM goals 
+      WHERE is_active = 1 AND is_completed = 1
+      ORDER BY completed_at DESC
+    `).all();
+
+    // Get targets for each goal
+    const getTargetsStmt = this.db.prepare(`
+      SELECT gt.*, c.name as category_name, c.color as category_color
+      FROM goal_targets gt
+      JOIN categories c ON gt.category_id = c.id
+      WHERE gt.goal_id = ?
+    `);
+    
+    return goals.map(goal => ({
+      ...goal,
+      targets: getTargetsStmt.all(goal.id).map(target => ({
+        category_id: target.category_id,
+        category_name: target.category_name,
+        target_hours: target.target_hours,
+        category_color: target.category_color
+      }))
+    }));
   }
 
   getTimeEntries(startDate = null, endDate = null) {
@@ -216,11 +311,46 @@ class DatabaseService {
         c.id,
         c.name,
         c.color,
+        c.is_system_category,
         COALESCE(SUM(te.duration_hours), 0) as total_hours,
         COUNT(DISTINCT te.date) as active_days
       FROM categories c
       LEFT JOIN time_entries te ON c.id = te.category_id 
         AND te.date BETWEEN ? AND ?
+      GROUP BY c.id, c.name, c.color, c.is_system_category
+      ORDER BY c.is_system_category ASC, total_hours DESC
+    `).all(startDate, endDate);
+  }
+
+  getProductiveCategoryStats(startDate, endDate) {
+    return this.db.prepare(`
+      SELECT 
+        c.id,
+        c.name,
+        c.color,
+        COALESCE(SUM(te.duration_hours), 0) as total_hours,
+        COUNT(DISTINCT te.date) as active_days
+      FROM categories c
+      LEFT JOIN time_entries te ON c.id = te.category_id 
+        AND te.date BETWEEN ? AND ?
+      WHERE c.is_system_category = 0
+      GROUP BY c.id, c.name, c.color
+      ORDER BY total_hours DESC
+    `).all(startDate, endDate);
+  }
+
+  getWasteTimeStats(startDate, endDate) {
+    return this.db.prepare(`
+      SELECT 
+        c.id,
+        c.name,
+        c.color,
+        COALESCE(SUM(te.duration_hours), 0) as total_hours,
+        COUNT(DISTINCT te.date) as active_days
+      FROM categories c
+      LEFT JOIN time_entries te ON c.id = te.category_id 
+        AND te.date BETWEEN ? AND ?
+      WHERE c.is_system_category = 1
       GROUP BY c.id, c.name, c.color
       ORDER BY total_hours DESC
     `).all(startDate, endDate);
@@ -246,17 +376,20 @@ class DatabaseService {
       LEFT JOIN time_entries te ON c.id = te.category_id 
         AND (g.start_date IS NULL OR te.date >= g.start_date)
         AND (g.end_date IS NULL OR te.date <= g.end_date)
-      WHERE g.is_active = 1
+      WHERE g.is_active = 1 AND c.is_system_category = 0
       GROUP BY g.id, gt.category_id, gt.target_hours
       ORDER BY g.id, c.name
     `).all();
   }
 
   getStreakData() {
+    // Only count dates with productive activities (non-system categories)
     const allEntries = this.db.prepare(`
-      SELECT DISTINCT date
-      FROM time_entries
-      ORDER BY date DESC
+      SELECT DISTINCT te.date
+      FROM time_entries te
+      JOIN categories c ON te.category_id = c.id
+      WHERE c.is_system_category = 0
+      ORDER BY te.date DESC
     `).all();
 
     if (allEntries.length === 0) {
@@ -458,6 +591,38 @@ function initializeDatabase() {
     }
   })
 
+  ipcMain.handle('mark-goal-completed', async (event, id) => {
+    try {
+      console.log('main::index.js::ipcHandler::mark-goal-completed::Marking goal as completed:', id)
+      return dbService.markGoalAsCompleted(id)
+    } catch (error) {
+      console.error('main::index.js::ipcHandler::mark-goal-completed::Error marking goal as completed:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('mark-goal-incomplete', async (event, id) => {
+    try {
+      console.log('main::index.js::ipcHandler::mark-goal-incomplete::Marking goal as incomplete:', id)
+      return dbService.markGoalAsIncomplete(id)
+    } catch (error) {
+      console.error('main::index.js::ipcHandler::mark-goal-incomplete::Error marking goal as incomplete:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('get-completed-goals', async () => {
+    try {
+      console.log('main::index.js::ipcHandler::get-completed-goals::Getting completed goals...')
+      const result = dbService.getCompletedGoals()
+      console.log('main::index.js::ipcHandler::get-completed-goals::Completed goals fetched:', result.length)
+      return result
+    } catch (error) {
+      console.error('main::index.js::ipcHandler::get-completed-goals::Error getting completed goals:', error)
+      return []
+    }
+  })
+
   // Time entry IPC handlers
   ipcMain.handle('get-time-entries', async (event, startDate, endDate) => {
     try {
@@ -510,6 +675,30 @@ function initializeDatabase() {
       return result
     } catch (error) {
       console.error('main::index.js::ipcHandler::get-category-stats::Error getting category stats:', error)
+      return []
+    }
+  })
+
+  ipcMain.handle('get-productive-category-stats', async (event, startDate, endDate) => {
+    try {
+      console.log('main::index.js::ipcHandler::get-productive-category-stats::Getting productive category stats...')
+      const result = dbService.getProductiveCategoryStats(startDate, endDate)
+      console.log('main::index.js::ipcHandler::get-productive-category-stats::Productive stats fetched:', result.length)
+      return result
+    } catch (error) {
+      console.error('main::index.js::ipcHandler::get-productive-category-stats::Error getting productive stats:', error)
+      return []
+    }
+  })
+
+  ipcMain.handle('get-waste-time-stats', async (event, startDate, endDate) => {
+    try {
+      console.log('main::index.js::ipcHandler::get-waste-time-stats::Getting waste time stats...')
+      const result = dbService.getWasteTimeStats(startDate, endDate)
+      console.log('main::index.js::ipcHandler::get-waste-time-stats::Waste time stats fetched:', result.length)
+      return result
+    } catch (error) {
+      console.error('main::index.js::ipcHandler::get-waste-time-stats::Error getting waste time stats:', error)
       return []
     }
   })
@@ -582,4 +771,3 @@ app.on('before-quit', () => {
     dbService.close()
   }
 })
-

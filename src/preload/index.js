@@ -14,6 +14,9 @@ const api = {
   createGoal: (title, description, startDate, endDate, targets) => ipcRenderer.invoke('create-goal', title, description, startDate, endDate, targets),
   updateGoal: (id, title, description, startDate, endDate) => ipcRenderer.invoke('update-goal', id, title, description, startDate, endDate),
   deleteGoal: (id) => ipcRenderer.invoke('delete-goal', id),
+  markGoalCompleted: (id) => ipcRenderer.invoke('mark-goal-completed', id),
+  markGoalIncomplete: (id) => ipcRenderer.invoke('mark-goal-incomplete', id),
+  getCompletedGoals: () => ipcRenderer.invoke('get-completed-goals'),
 
   // Time Entries
   getTimeEntries: (startDate, endDate) => ipcRenderer.invoke('get-time-entries', startDate, endDate),
@@ -23,6 +26,8 @@ const api = {
 
   // Statistics
   getCategoryStats: (startDate, endDate) => ipcRenderer.invoke('get-category-stats', startDate, endDate),
+  getProductiveCategoryStats: (startDate, endDate) => ipcRenderer.invoke('get-productive-category-stats', startDate, endDate),
+  getWasteTimeStats: (startDate, endDate) => ipcRenderer.invoke('get-waste-time-stats', startDate, endDate),
   getGoalProgress: () => ipcRenderer.invoke('get-goal-progress'),
   getStreakData: () => ipcRenderer.invoke('get-streak-data')
 }

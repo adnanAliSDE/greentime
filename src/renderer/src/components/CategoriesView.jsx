@@ -8,12 +8,26 @@ const CategoriesView = () => {
   const [showCategoryModal, setShowCategoryModal] = useState(false)
   const [categoryToEdit, setCategoryToEdit] = useState(null)
 
+  // Filter out system categories for editing
+  const editableCategories = categories.filter(category => !category.is_system_category)
+  const systemCategories = categories.filter(category => category.is_system_category)
+
   const handleEditCategory = (category) => {
+    if (category.is_system_category) {
+      alert('System categories cannot be edited.')
+      return
+    }
     setCategoryToEdit(category)
     setShowCategoryModal(true)
   }
 
   const handleDeleteCategory = async (categoryId) => {
+    const category = categories.find(cat => cat.id === categoryId)
+    if (category && category.is_system_category) {
+      alert('System categories cannot be deleted.')
+      return
+    }
+    
     if (window.confirm('Are you sure you want to delete this category? All associated time entries will also be deleted.')) {
       try {
         await deleteCategory(categoryId)
@@ -63,66 +77,128 @@ const CategoriesView = () => {
       </div>
 
       {/* Categories Grid */}
-      {categories.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {categories.map((category) => (
-            <div key={category.id} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden hover:shadow-md transition-shadow">
-              {/* Category Header */}
-              <div className="p-6">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <div 
-                      className="w-4 h-4 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: category.color }}
-                    />
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white truncate">
-                      {category.name}
-                    </h3>
+      {editableCategories.length > 0 ? (
+        <>
+          {/* Editable Categories */}
+          <div className="mb-8">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Your Categories</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {editableCategories.map((category) => (
+                <div key={category.id} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden hover:shadow-md transition-shadow">
+                  {/* Category Header */}
+                  <div className="p-6">
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div 
+                          className="w-4 h-4 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: category.color }}
+                        />
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white truncate">
+                          {category.name}
+                        </h3>
+                      </div>
+                      
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => handleEditCategory(category)}
+                          className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                          title="Edit category"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteCategory(category.id)}
+                          className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                          title="Delete category"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Category Description */}
+                    {category.description ? (
+                      <p className="text-gray-600 dark:text-gray-400 text-sm leading-relaxed">
+                        {category.description}
+                      </p>
+                    ) : (
+                      <p className="text-gray-400 dark:text-gray-500 text-sm italic">
+                        No description provided
+                      </p>
+                    )}
                   </div>
-                  
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => handleEditCategory(category)}
-                      className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-                      title="Edit category"
-                    >
-                      <Edit className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteCategory(category.id)}
-                      className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
-                      title="Delete category"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+
+                  {/* Category Footer */}
+                  <div className="px-6 py-4 bg-gray-50 dark:bg-gray-700 border-t border-gray-200 dark:border-gray-600">
+                    <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+                      <span>Created: {new Date(category.created_at).toLocaleDateString()}</span>
+                      <div className="flex items-center gap-1">
+                        <Palette className="w-3 h-3" />
+                        <span className="font-mono">{category.color}</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
+              ))}
+            </div>
+          </div>
 
-                {/* Category Description */}
-                {category.description ? (
-                  <p className="text-gray-600 dark:text-gray-400 text-sm leading-relaxed">
-                    {category.description}
-                  </p>
-                ) : (
-                  <p className="text-gray-400 dark:text-gray-500 text-sm italic">
-                    No description provided
-                  </p>
-                )}
-              </div>
+          {/* System Categories (Read-only) */}
+          {systemCategories.length > 0 && (
+            <div className="mb-8">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">System Categories</h2>
+              <p className="text-gray-600 dark:text-gray-400 text-sm mb-4">
+                These categories are managed by the system and cannot be edited or deleted.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {systemCategories.map((category) => (
+                  <div key={category.id} className="bg-orange-50 dark:bg-orange-900/20 rounded-xl shadow-sm border border-orange-200 dark:border-orange-800 overflow-hidden">
+                    {/* Category Header */}
+                    <div className="p-6">
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                          <div 
+                            className="w-4 h-4 rounded-full flex-shrink-0"
+                            style={{ backgroundColor: category.color }}
+                          />
+                          <h3 className="text-lg font-semibold text-gray-900 dark:text-white truncate">
+                            {category.name}
+                          </h3>
+                        </div>
+                        
+                        <div className="px-2 py-1 text-xs bg-orange-100 dark:bg-orange-900/40 text-orange-800 dark:text-orange-200 rounded-full">
+                          System
+                        </div>
+                      </div>
 
-              {/* Category Footer */}
-              <div className="px-6 py-4 bg-gray-50 dark:bg-gray-700 border-t border-gray-200 dark:border-gray-600">
-                <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
-                  <span>Created: {new Date(category.created_at).toLocaleDateString()}</span>
-                  <div className="flex items-center gap-1">
-                    <Palette className="w-3 h-3" />
-                    <span className="font-mono">{category.color}</span>
+                      {/* Category Description */}
+                      {category.description ? (
+                        <p className="text-gray-600 dark:text-gray-400 text-sm leading-relaxed">
+                          {category.description}
+                        </p>
+                      ) : (
+                        <p className="text-gray-400 dark:text-gray-500 text-sm italic">
+                          No description provided
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Category Footer */}
+                    <div className="px-6 py-4 bg-orange-100 dark:bg-orange-900/30 border-t border-orange-200 dark:border-orange-800">
+                      <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+                        <span>System Category</span>
+                        <div className="flex items-center gap-1">
+                          <Palette className="w-3 h-3" />
+                          <span className="font-mono">{category.color}</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                ))}
               </div>
             </div>
-          ))}
-        </div>
+          )}
+        </>
       ) : (
         <div className="text-center py-16">
           <Bookmark className="w-16 h-16 text-gray-400 mx-auto mb-6" />

@@ -1,15 +1,16 @@
 import { useState, useMemo } from 'react'
 import { useAppStore } from '../store/appStore'
-import { BarChart3, Calendar, Clock, TrendingUp, Target, Award } from 'lucide-react'
+import { BarChart3, Calendar, Clock, TrendingUp, Target, Award, AlertTriangle } from 'lucide-react'
 
 const StatsView = () => {
-  const categoryStats = useAppStore((state) => state.categoryStats)
+  const productiveCategoryStats = useAppStore((state) => state.productiveCategoryStats)
+  const wasteTimeStats = useAppStore((state) => state.wasteTimeStats)
   const goalProgress = useAppStore((state) => state.goalProgress)
   const streakData = useAppStore((state) => state.streakData)
   const timeEntries = useAppStore((state) => state.timeEntries)
   const loadingStats = useAppStore((state) => state.loadingStats)
   const loadingTimeEntries = useAppStore((state) => state.loadingTimeEntries)
-
+  
   const [selectedPeriod, setSelectedPeriod] = useState('month') // week, month, all
 
   // Helper function for date formatting
@@ -22,9 +23,9 @@ const StatsView = () => {
   }
 
   // Filter data based on selected period using useMemo for performance
-  const { filteredTimeEntries, filteredCategoryStats, totalHours, activeDays, averageHoursPerDay } = useMemo(() => {
+  const { filteredTimeEntries, filteredProductiveStats, filteredWasteStats, productiveHours, wasteHours, totalHours, activeDays, averageHoursPerDay } = useMemo(() => {
     console.log(`StatsView::useMemo::Filtering data for period: ${selectedPeriod}`)
-
+    
     let filteredEntries = []
     if (selectedPeriod === 'all') {
       filteredEntries = timeEntries.filter(entry => true) // No date filtering for 'all'
@@ -58,45 +59,95 @@ const StatsView = () => {
       )
     }
 
-    // Calculate category stats from filtered time entries
-    const categoryTotals = {}
-    filteredEntries.forEach(entry => {
-      if (!categoryTotals[entry.category_id]) {
-        const category = categoryStats.find(cat => cat.category_id === entry.category_id)
-        categoryTotals[entry.category_id] = {
-          category_id: entry.category_id,
-          category_name: entry.category_name || (category ? category.category_name : 'Unknown'),
-          name: entry.category_name || (category ? category.category_name : 'Unknown'),
-          color: entry.color || (category ? category.color : '#6B7280'),
+    // Separate productive and waste time entries based on system category flag
+    const productiveEntries = filteredEntries.filter(entry => {
+      // Check if this entry belongs to a system category
+      const isSystemCategory = wasteTimeStats.some(wasteCat => 
+        wasteCat.name === entry.category_name || wasteCat.id === entry.category_id
+      )
+      return !isSystemCategory
+    })
+    
+    const wasteEntries = filteredEntries.filter(entry => {
+      // Check if this entry belongs to a system category
+      const isSystemCategory = wasteTimeStats.some(wasteCat => 
+        wasteCat.name === entry.category_name || wasteCat.id === entry.category_id
+      )
+      return isSystemCategory
+    })
+
+    // Calculate productive category stats from filtered time entries
+    const productiveTotals = {}
+    productiveEntries.forEach(entry => {
+      if (!productiveTotals[entry.category_id]) {
+        const category = productiveCategoryStats.find(cat => cat.id === entry.category_id)
+        productiveTotals[entry.category_id] = {
+          id: entry.category_id,
+          name: entry.category_name || (category ? category.name : 'Unknown'),
+          color: entry.color || entry.category_color || (category ? category.color : '#6B7280'),
           total_hours: 0,
           active_days: new Set()
         }
       }
-      categoryTotals[entry.category_id].total_hours += entry.duration_hours
-      categoryTotals[entry.category_id].active_days.add(entry.date)
+      productiveTotals[entry.category_id].total_hours += entry.duration_hours
+      productiveTotals[entry.category_id].active_days.add(entry.date)
     })
 
-    const filteredStats = Object.values(categoryTotals).map(stat => ({
+    // Calculate waste time stats
+    const wasteTotals = {}
+    wasteEntries.forEach(entry => {
+      if (!wasteTotals[entry.category_id]) {
+        const category = wasteTimeStats.find(cat => cat.id === entry.category_id)
+        wasteTotals[entry.category_id] = {
+          id: entry.category_id,
+          name: entry.category_name || (category ? category.name : 'Unknown'),
+          color: entry.color || entry.category_color || (category ? category.color : '#EF4444'),
+          total_hours: 0,
+          active_days: new Set()
+        }
+      }
+      wasteTotals[entry.category_id].total_hours += entry.duration_hours
+      wasteTotals[entry.category_id].active_days.add(entry.date)
+    })
+
+    const filteredProductiveStats = Object.values(productiveTotals).map(stat => ({
       ...stat,
       active_days: stat.active_days.size
     }))
 
-    const total = filteredStats.reduce((sum, stat) => sum + stat.total_hours, 0)
-    const active = Math.max(...filteredStats.map(stat => stat.active_days), 0)
+    const filteredWasteStats = Object.values(wasteTotals).map(stat => ({
+      ...stat,
+      active_days: stat.active_days.size
+    }))
+
+    const productiveTotal = filteredProductiveStats.reduce((sum, stat) => sum + stat.total_hours, 0)
+    const wasteTotal = filteredWasteStats.reduce((sum, stat) => sum + stat.total_hours, 0)
+    const active = Math.max(...filteredProductiveStats.map(stat => stat.active_days), 0)
 
     return {
       filteredTimeEntries: filteredEntries,
-      filteredCategoryStats: filteredStats,
-      totalHours: total,
+      filteredProductiveStats,
+      filteredWasteStats,
+      productiveHours: productiveTotal,
+      wasteHours: wasteTotal,
+      totalHours: productiveTotal + wasteTotal,
       activeDays: active,
-      averageHoursPerDay: active > 0 ? total / active : 0
+      averageHoursPerDay: active > 0 ? productiveTotal / active : 0
     }
-  }, [selectedPeriod, timeEntries, categoryStats])
+  }, [selectedPeriod, timeEntries, productiveCategoryStats, wasteTimeStats])
 
-  // Calculate weekly breakdown using useMemo
+  // Calculate weekly breakdown using useMemo (only productive time)
   const weeklyData = useMemo(() => {
     const weeklyBreakdown = {}
-    filteredTimeEntries.forEach(entry => {
+    // Only include productive entries in weekly breakdown
+    const productiveEntries = filteredTimeEntries.filter(entry => {
+      const isSystemCategory = wasteTimeStats.some(wasteCat => 
+        wasteCat.name === entry.category_name || wasteCat.id === entry.category_id
+      )
+      return !isSystemCategory
+    })
+
+    productiveEntries.forEach(entry => {
       const date = new Date(entry.date)
       const week = getWeekKey(date)
       if (!weeklyBreakdown[week]) {
@@ -107,7 +158,7 @@ const StatsView = () => {
     })
 
     return Object.values(weeklyBreakdown).sort((a, b) => new Date(a.week) - new Date(b.week))
-  }, [filteredTimeEntries])
+  }, [filteredTimeEntries, wasteTimeStats])
 
   function getWeekKey(date) {
     const startOfWeek = new Date(date)
@@ -169,12 +220,12 @@ const StatsView = () => {
         <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Hours</p>
-              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                {totalHours.toFixed(1)}
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Productive Hours</p>
+              <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                {productiveHours.toFixed(1)}
               </p>
             </div>
-            <Clock className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+            <Clock className="w-8 h-8 text-green-600 dark:text-green-400" />
           </div>
         </div>
 
@@ -182,11 +233,11 @@ const StatsView = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Active Days</p>
-              <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
                 {activeDays}
               </p>
             </div>
-            <Calendar className="w-8 h-8 text-green-600 dark:text-green-400" />
+            <Calendar className="w-8 h-8 text-blue-600 dark:text-blue-400" />
           </div>
         </div>
 
@@ -215,22 +266,45 @@ const StatsView = () => {
         </div>
       </div>
 
+      {/* Waste Time Alert (if any) */}
+      {wasteHours > 0 && (
+        <div className="mb-8 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6">
+          <div className="flex items-center gap-3 mb-3">
+            <AlertTriangle className="w-6 h-6 text-red-600 dark:text-red-400" />
+            <h3 className="text-lg font-semibold text-red-900 dark:text-red-100">Time Waste Alert</h3>
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-red-700 dark:text-red-300">
+                You've spent <span className="font-bold">{wasteHours.toFixed(1)} hours</span> on unproductive activities this {selectedPeriod === 'all' ? 'in total' : selectedPeriod}.
+              </p>
+              <p className="text-sm text-red-600 dark:text-red-400 mt-1">
+                Consider redirecting this time toward your goals for better productivity.
+              </p>
+            </div>
+            <div className="text-3xl font-bold text-red-600 dark:text-red-400">
+              {wasteHours.toFixed(1)}h
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
         {/* Category Breakdown */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
           <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Category Breakdown</h2>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Productive Categories</h2>
           </div>
           <div className="p-6">
-            {filteredCategoryStats.filter(stat => stat.total_hours > 0).length > 0 ? (
+            {filteredProductiveStats.filter(stat => stat.total_hours > 0).length > 0 ? (
               <div className="space-y-4">
-                {filteredCategoryStats
+                {filteredProductiveStats
                   .filter(stat => stat.total_hours > 0)
                   .sort((a, b) => b.total_hours - a.total_hours)
                   .map((stat) => {
-                    const percentage = totalHours > 0 ? (stat.total_hours / totalHours) * 100 : 0
+                    const percentage = productiveHours > 0 ? (stat.total_hours / productiveHours) * 100 : 0
                     return (
-                      <div key={stat.category_id} className="space-y-2">
+                      <div key={stat.id} className="space-y-2">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
                             <div
@@ -266,7 +340,7 @@ const StatsView = () => {
             ) : (
               <div className="text-center py-8">
                 <BarChart3 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-500 dark:text-gray-400">No data for selected period</p>
+                <p className="text-gray-500 dark:text-gray-400">No productive time tracked for selected period</p>
               </div>
             )}
           </div>

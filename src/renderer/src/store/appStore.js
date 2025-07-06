@@ -8,6 +8,8 @@ export const useAppStore = create((set, get) => ({
 
   // Goals state
   goals: [],
+  completedGoals: [],
+  showCompletedGoals: false,
   loadingGoals: false,
 
   // Time entries state
@@ -16,6 +18,8 @@ export const useAppStore = create((set, get) => ({
 
   // Statistics state
   categoryStats: [],
+  productiveCategoryStats: [],
+  wasteTimeStats: [],
   goalProgress: [],
   streakData: { currentStreak: 0, longestStreak: 0, totalActiveDays: 0 },
   loadingStats: false,
@@ -30,6 +34,7 @@ export const useAppStore = create((set, get) => ({
   setActiveView: (view) => set({ activeView: view }),
   setSelectedDate: (date) => set({ selectedDate: date }),
   toggleDarkMode: () => set((state) => ({ darkMode: !state.darkMode })),
+  toggleShowCompletedGoals: () => set((state) => ({ showCompletedGoals: !state.showCompletedGoals })),
 
   // Category actions
   fetchCategories: async () => {
@@ -125,6 +130,45 @@ export const useAppStore = create((set, get) => ({
     }
   },
 
+  markGoalCompleted: async (id) => {
+    try {
+      await window.api.markGoalCompleted(id)
+      await Promise.all([
+        get().fetchGoals(),
+        get().fetchCompletedGoals(),
+        get().fetchStatistics()
+      ])
+    } catch (error) {
+      console.error('store::appStore::markGoalCompleted::Failed to mark goal as completed:', error)
+      throw error
+    }
+  },
+
+  markGoalIncomplete: async (id) => {
+    try {
+      await window.api.markGoalIncomplete(id)
+      await Promise.all([
+        get().fetchGoals(),
+        get().fetchCompletedGoals(),
+        get().fetchStatistics()
+      ])
+    } catch (error) {
+      console.error('store::appStore::markGoalIncomplete::Failed to mark goal as incomplete:', error)
+      throw error
+    }
+  },
+
+  fetchCompletedGoals: async () => {
+    try {
+      console.log('store::appStore::fetchCompletedGoals::Getting completed goals...')
+      const completedGoals = await window.api.getCompletedGoals()
+      console.log('store::appStore::fetchCompletedGoals::Completed goals fetched:', completedGoals.length)
+      set({ completedGoals })
+    } catch (error) {
+      console.error('store::appStore::fetchCompletedGoals::Failed to fetch completed goals:', error)
+    }
+  },
+
   // Time entry actions
   fetchTimeEntries: async (startDate = null, endDate = null) => {
     const state = get()
@@ -210,6 +254,14 @@ export const useAppStore = create((set, get) => ({
       const categoryStats = await window.api.getCategoryStats(startDate, endDate)
       console.log('store::appStore::fetchStatistics::Category stats fetched:', categoryStats.length)
 
+      console.log('store::appStore::fetchStatistics::Getting productive category stats...')
+      const productiveCategoryStats = await window.api.getProductiveCategoryStats(startDate, endDate)
+      console.log('store::appStore::fetchStatistics::Productive stats fetched:', productiveCategoryStats.length)
+
+      console.log('store::appStore::fetchStatistics::Getting waste time stats...')
+      const wasteTimeStats = await window.api.getWasteTimeStats(startDate, endDate)
+      console.log('store::appStore::fetchStatistics::Waste time stats fetched:', wasteTimeStats.length)
+
       console.log('store::appStore::fetchStatistics::Getting goal progress...')
       const goalProgress = await window.api.getGoalProgress()
       console.log('store::appStore::fetchStatistics::Goal progress fetched:', goalProgress.length)
@@ -220,6 +272,8 @@ export const useAppStore = create((set, get) => ({
 
       set({
         categoryStats,
+        productiveCategoryStats,
+        wasteTimeStats,
         goalProgress,
         streakData,
         loadingStats: false
@@ -243,6 +297,7 @@ export const useAppStore = create((set, get) => ({
       await Promise.all([
         get().fetchCategories(),
         get().fetchGoals(),
+        get().fetchCompletedGoals(),
         get().fetchTimeEntries(),
         get().fetchStatistics()
       ])
@@ -293,8 +348,13 @@ export const useDateStore = create((set, get) => ({
     })
   },
 
-  // Format date for input
+  // Format date for input (avoiding timezone issues)
   formatDateForInput: (date) => {
-    return new Date(date).toISOString().split('T')[0]
+    const d = new Date(date);
+    // Use local timezone to avoid UTC conversion issues
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 }))
