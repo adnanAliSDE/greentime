@@ -29,7 +29,16 @@ const api = {
   getProductiveCategoryStats: (startDate, endDate) => ipcRenderer.invoke('get-productive-category-stats', startDate, endDate),
   getWasteTimeStats: (startDate, endDate) => ipcRenderer.invoke('get-waste-time-stats', startDate, endDate),
   getGoalProgress: () => ipcRenderer.invoke('get-goal-progress'),
-  getStreakData: () => ipcRenderer.invoke('get-streak-data')
+  getStreakData: () => ipcRenderer.invoke('get-streak-data'),
+
+  // Todos
+  getTodos: (startDate, endDate) => ipcRenderer.invoke('get-todos', startDate, endDate),
+  getTodosByDate: (date) => ipcRenderer.invoke('get-todos-by-date', date),
+  createTodo: (title, description, startDate, deadlineTime) => ipcRenderer.invoke('create-todo', title, description, startDate, deadlineTime),
+  updateTodo: (id, title, description, startDate, deadlineTime) => ipcRenderer.invoke('update-todo', id, title, description, startDate, deadlineTime),
+  deleteTodo: (id) => ipcRenderer.invoke('delete-todo', id),
+  markTodoCompleted: (id) => ipcRenderer.invoke('mark-todo-completed', id),
+  markTodoIncomplete: (id) => ipcRenderer.invoke('mark-todo-incomplete', id)
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

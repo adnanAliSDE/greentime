@@ -8,7 +8,7 @@ const CalendarView = () => {
   const timeEntries = useAppStore((state) => state.timeEntries)
   const selectedDate = useAppStore((state) => state.selectedDate)
   const setSelectedDate = useAppStore((state) => state.setSelectedDate)
-  
+
   const [showTimeEntryModal, setShowTimeEntryModal] = useState(false)
   const [entryToEdit, setEntryToEdit] = useState(null)
 
@@ -35,7 +35,17 @@ const CalendarView = () => {
 
   const selectedDateStr = formatDateForInput(selectedDate)
   const entriesForSelectedDate = timeEntries.filter(entry => entry.date === selectedDateStr)
-  const totalHoursForDate = entriesForSelectedDate.reduce((total, entry) => total + entry.duration_hours, 0)
+  // Calculate total hours for the selected date which are time waste
+  const entriesForSelectedDateWaste = entriesForSelectedDate.reduce((total, { duration_hours, category_name }) => category_name.toLowerCase() === 'time waste' ? total + duration_hours : total, 0)
+  // Calculate total hours for the selected date, excluding "time waste" entries
+  const totalHoursForDate = entriesForSelectedDate.reduce((total, entry) => {
+    // Ensure we are summing the duration_hours correctly
+    if (entry.category_name.toLowerCase() === 'time waste') {
+      return total
+    } else {
+      return total + entry.duration_hours
+    }
+  }, 0)
 
   // Get dates that have time entries for calendar highlighting
   const datesWithEntries = [...new Set(timeEntries.map(entry => entry.date))]
@@ -44,11 +54,14 @@ const CalendarView = () => {
     if (view === 'month') {
       const dateStr = formatDateForInput(date)
       const hasEntries = datesWithEntries.includes(dateStr)
-      
+
       if (hasEntries) {
         const dayEntries = timeEntries.filter(entry => entry.date === dateStr)
-        const dayTotal = dayEntries.reduce((total, entry) => total + entry.duration_hours, 0)
-        
+        const dayTotal = dayEntries.reduce((total, entry) => {
+          console.log(entry)
+          return total + entry.duration_hours
+        }, 0)
+
         return (
           <div className="flex justify-center mt-1">
             <div className="w-2 h-2 bg-green-500 rounded-full" title={`${dayTotal.toFixed(1)}h logged`} />
@@ -90,7 +103,7 @@ const CalendarView = () => {
             Track your time entries by date
           </p>
         </div>
-        
+
         <button
           onClick={handleAddEntry}
           className="flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors"
@@ -126,16 +139,24 @@ const CalendarView = () => {
                 {formatDate(selectedDate)}
               </h2>
               <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
-                <Clock className="w-4 h-4" />
-                <span className="font-medium">{totalHoursForDate.toFixed(1)}h</span>
+                <div className="flex flex-col items-end gap-2">
+                  <div className="flex items-center gap-1 text-sm font-medium">
+
+                    <Clock className="w-4 h-4" />
+                    <span className="font-medium">{totalHoursForDate.toFixed(1)}h productive</span>
+                  </div>
+                  {entriesForSelectedDateWaste > 0 && (
+                    <span className="text-sm text-red-500 dark:text-red-400">{entriesForSelectedDateWaste.toFixed(1)}h wasted</span>
+                  )}
+                </div>
               </div>
             </div>
-            
+
             {entriesForSelectedDate.length > 0 && (
               <div className="space-y-2">
                 {entriesForSelectedDate.map((entry) => (
                   <div key={entry.id} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                    <div 
+                    <div
                       className="w-3 h-3 rounded-full flex-shrink-0"
                       style={{ backgroundColor: entry.category_color }}
                     />
@@ -167,7 +188,7 @@ const CalendarView = () => {
                 ))}
               </div>
             )}
-            
+
             {entriesForSelectedDate.length === 0 && (
               <div className="text-center py-8">
                 <Clock className="w-12 h-12 text-gray-400 mx-auto mb-4" />

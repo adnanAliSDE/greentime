@@ -14,11 +14,11 @@ class DatabaseService {
         ? join(app.getPath('userData'), 'greentime.db')
         : join(process.cwd(), 'greentime.db');
 
-      console.log('main::index.js::DataBaseService::Database path:', dbPath)
+      // console.log('main::index.js::DataBaseService::Database path:', dbPath)
       this.db = new Database(dbPath);
-      console.log('main::index.js::DataBaseService::Database connection established')
+      // console.log('main::index.js::DataBaseService::Database connection established')
       this.initializeTables();
-      console.log('main::index.js::DataBaseService::Database tables initialized')
+      // console.log('main::index.js::DataBaseService::Database tables initialized')
     } catch (error) {
       console.error('main::index.js::DataBaseService::Database constructor error:', error)
       throw error
@@ -44,9 +44,9 @@ class DatabaseService {
       const hasSystemColumn = columns.some(col => col.name === 'is_system_category');
       
       if (!hasSystemColumn) {
-        console.log('main::index.js::DataBaseService::Adding is_system_category column...');
+        // console.log('main::index.js::DataBaseService::Adding is_system_category column...');
         this.db.exec("ALTER TABLE categories ADD COLUMN is_system_category BOOLEAN DEFAULT 0");
-        console.log('main::index.js::DataBaseService::is_system_category column added successfully');
+        // console.log('main::index.js::DataBaseService::is_system_category column added successfully');
       }
     } catch (error) {
       console.error('main::index.js::DataBaseService::Migration error:', error);
@@ -74,15 +74,15 @@ class DatabaseService {
       const hasCompletedAtColumn = columns.some(col => col.name === 'completed_at');
       
       if (!hasCompletedColumn) {
-        console.log('main::index.js::DataBaseService::Adding is_completed column to goals...');
+        // console.log('main::index.js::DataBaseService::Adding is_completed column to goals...');
         this.db.exec("ALTER TABLE goals ADD COLUMN is_completed BOOLEAN DEFAULT 0");
-        console.log('main::index.js::DataBaseService::is_completed column added successfully');
+        // console.log('main::index.js::DataBaseService::is_completed column added successfully');
       }
       
       if (!hasCompletedAtColumn) {
-        console.log('main::index.js::DataBaseService::Adding completed_at column to goals...');
+        // console.log('main::index.js::DataBaseService::Adding completed_at column to goals...');
         this.db.exec("ALTER TABLE goals ADD COLUMN completed_at DATETIME");
-        console.log('main::index.js::DataBaseService::completed_at column added successfully');
+        // console.log('main::index.js::DataBaseService::completed_at column added successfully');
       }
     } catch (error) {
       console.error('main::index.js::DataBaseService::Goals migration error:', error);
@@ -115,8 +115,54 @@ class DatabaseService {
       )
     `);
 
+    // Todos table
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS todos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        description TEXT,
+        start_date DATE NOT NULL,
+        deadline_time TIME NOT NULL,
+        is_completed BOOLEAN DEFAULT 0,
+        completed_at DATETIME NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create indexes for better performance
+    this.createIndexes();
+
     // Insert default categories
     this.insertDefaultCategories();
+  }
+
+  createIndexes() {
+    // Index for time_entries date column (most frequently queried)
+    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_time_entries_date ON time_entries(date)`);
+    
+    // Index for time_entries category_id (for JOIN operations)
+    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_time_entries_category_id ON time_entries(category_id)`);
+    
+    // Index for date and category_id together (for complex queries)
+    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_time_entries_date_category ON time_entries(date, category_id)`);
+    
+    // Index for categories is_system_category (for filtering)
+    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_categories_system ON categories(is_system_category)`);
+    
+    // Index for goals is_active (for filtering active goals)
+    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_goals_active ON goals(is_active)`);
+    
+    // Index for goals is_completed (for filtering completed goals)
+    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_goals_completed ON goals(is_completed)`);
+    
+    // Index for todos start_date (for filtering by date)
+    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_todos_start_date ON todos(start_date)`);
+    
+    // Index for todos is_completed (for filtering completed todos)
+    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_todos_completed ON todos(is_completed)`);
+    
+    // console.log('main::index.js::DataBaseService::Database indexes created');
   }
 
   insertDefaultCategories() {
@@ -446,6 +492,72 @@ class DatabaseService {
     };
   }
 
+  // Todo methods
+  getTodos(startDate = null, endDate = null) {
+    let query = `
+      SELECT * FROM todos 
+      WHERE 1=1
+    `;
+    const params = [];
+
+    if (startDate) {
+      query += ` AND start_date >= ?`;
+      params.push(startDate);
+    }
+
+    if (endDate) {
+      query += ` AND start_date <= ?`;
+      params.push(endDate);
+    }
+
+    query += ` ORDER BY start_date DESC, deadline_time ASC`;
+
+    return this.db.prepare(query).all(...params);
+  }
+
+  getTodosByDate(date) {
+    return this.db.prepare(`
+      SELECT * FROM todos 
+      WHERE start_date = ?
+      ORDER BY deadline_time ASC
+    `).all(date);
+  }
+
+  createTodo(title, description, startDate, deadlineTime) {
+    return this.db.prepare(`
+      INSERT INTO todos (title, description, start_date, deadline_time) 
+      VALUES (?, ?, ?, ?)
+    `).run(title, description, startDate, deadlineTime);
+  }
+
+  updateTodo(id, title, description, startDate, deadlineTime) {
+    return this.db.prepare(`
+      UPDATE todos 
+      SET title = ?, description = ?, start_date = ?, deadline_time = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(title, description, startDate, deadlineTime, id);
+  }
+
+  deleteTodo(id) {
+    return this.db.prepare('DELETE FROM todos WHERE id = ?').run(id);
+  }
+
+  markTodoCompleted(id) {
+    return this.db.prepare(`
+      UPDATE todos 
+      SET is_completed = 1, completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(id);
+  }
+
+  markTodoIncomplete(id) {
+    return this.db.prepare(`
+      UPDATE todos 
+      SET is_completed = 0, completed_at = NULL, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(id);
+  }
+
   close() {
     this.db.close();
   }
@@ -489,9 +601,9 @@ function createWindow() {
 // Initialize database and IPC handlers
 function initializeDatabase() {
   try {
-    console.log('main::index.js::initializeDatabase::Initializing database...')
+    // console.log('main::index.js::initializeDatabase::Initializing database...')
     dbService = new DatabaseService()
-    console.log('main::index.js::initializeDatabase::Database initialized successfully')
+    // console.log('main::index.js::initializeDatabase::Database initialized successfully')
   } catch (error) {
     console.error('main::index.js::initializeDatabase::Failed to initialize database:', error)
     // Continue with dummy handlers that return empty data
@@ -508,39 +620,39 @@ function initializeDatabase() {
   // Category IPC handlers
   ipcMain.handle('get-categories', async () => {
     try {
-      console.log('main::index.js::ipcHandler::get-categories::Getting categories...')
+      // // console.log('main::index.js::ipcHandler::get-categories::Getting categories...')
       const result = dbService.getCategories()
-      console.log('main::index.js::ipcHandler::get-categories::Categories fetched:', result.length)
+      // // console.log('main::index.js::ipcHandler::get-categories::Categories fetched:', result.length)
       return result
     } catch (error) {
-      console.error('main::index.js::ipcHandler::get-categories::Error getting categories:', error)
+      // console.error('main::index.js::ipcHandler::get-categories::Error getting categories:', error)
       return []
     }
   })
 
   ipcMain.handle('create-category', async (event, name, description, color) => {
     try {
-      console.log('main::index.js::ipcHandler::create-category::Creating category:', name)
+      // // console.log('main::index.js::ipcHandler::create-category::Creating category:', name)
       return dbService.createCategory(name, description, color)
     } catch (error) {
-      console.error('main::index.js::ipcHandler::create-category::Error creating category:', error)
+      // console.error('main::index.js::ipcHandler::create-category::Error creating category:', error)
       throw error
     }
   })
 
   ipcMain.handle('update-category', async (event, id, name, description, color) => {
     try {
-      console.log('main::index.js::ipcHandler::update-category::Updating category:', id)
+      // // console.log('main::index.js::ipcHandler::update-category::Updating category:', id)
       return dbService.updateCategory(id, name, description, color)
     } catch (error) {
-      console.error('main::index.js::ipcHandler::update-category::Error updating category:', error)
+      // console.error('main::index.js::ipcHandler::update-category::Error updating category:', error)
       throw error
     }
   })
 
   ipcMain.handle('delete-category', async (event, id) => {
     try {
-      console.log('main::index.js::ipcHandler::delete-category::Deleting category:', id)
+      // console.log('main::index.js::ipcHandler::delete-category::Deleting category:', id)
       return dbService.deleteCategory(id)
     } catch (error) {
       console.error('main::index.js::ipcHandler::delete-category::Error deleting category:', error)
@@ -551,9 +663,9 @@ function initializeDatabase() {
   // Goal IPC handlers
   ipcMain.handle('get-goals', async () => {
     try {
-      console.log('main::index.js::ipcHandler::get-goals::Getting goals...')
+      // console.log('main::index.js::ipcHandler::get-goals::Getting goals...')
       const result = dbService.getGoals()
-      console.log('main::index.js::ipcHandler::get-goals::Goals fetched:', result.length)
+      // console.log('main::index.js::ipcHandler::get-goals::Goals fetched:', result.length)
       return result
     } catch (error) {
       console.error('main::index.js::ipcHandler::get-goals::Error getting goals:', error)
@@ -563,7 +675,7 @@ function initializeDatabase() {
 
   ipcMain.handle('create-goal', async (event, title, description, startDate, endDate, targets) => {
     try {
-      console.log('main::index.js::ipcHandler::create-goal::Creating goal:', title)
+      // console.log('main::index.js::ipcHandler::create-goal::Creating goal:', title)
       return dbService.createGoal(title, description, startDate, endDate, targets)
     } catch (error) {
       console.error('main::index.js::ipcHandler::create-goal::Error creating goal:', error)
@@ -573,7 +685,7 @@ function initializeDatabase() {
 
   ipcMain.handle('update-goal', async (event, id, title, description, startDate, endDate) => {
     try {
-      console.log('main::index.js::ipcHandler::update-goal::Updating goal:', id)
+      // console.log('main::index.js::ipcHandler::update-goal::Updating goal:', id)
       return dbService.updateGoal(id, title, description, startDate, endDate)
     } catch (error) {
       console.error('main::index.js::ipcHandler::update-goal::Error updating goal:', error)
@@ -583,7 +695,7 @@ function initializeDatabase() {
 
   ipcMain.handle('delete-goal', async (event, id) => {
     try {
-      console.log('main::index.js::ipcHandler::delete-goal::Deleting goal:', id)
+      // console.log('main::index.js::ipcHandler::delete-goal::Deleting goal:', id)
       return dbService.deleteGoal(id)
     } catch (error) {
       console.error('main::index.js::ipcHandler::delete-goal::Error deleting goal:', error)
@@ -593,7 +705,7 @@ function initializeDatabase() {
 
   ipcMain.handle('mark-goal-completed', async (event, id) => {
     try {
-      console.log('main::index.js::ipcHandler::mark-goal-completed::Marking goal as completed:', id)
+      // console.log('main::index.js::ipcHandler::mark-goal-completed::Marking goal as completed:', id)
       return dbService.markGoalAsCompleted(id)
     } catch (error) {
       console.error('main::index.js::ipcHandler::mark-goal-completed::Error marking goal as completed:', error)
@@ -603,7 +715,7 @@ function initializeDatabase() {
 
   ipcMain.handle('mark-goal-incomplete', async (event, id) => {
     try {
-      console.log('main::index.js::ipcHandler::mark-goal-incomplete::Marking goal as incomplete:', id)
+      // console.log('main::index.js::ipcHandler::mark-goal-incomplete::Marking goal as incomplete:', id)
       return dbService.markGoalAsIncomplete(id)
     } catch (error) {
       console.error('main::index.js::ipcHandler::mark-goal-incomplete::Error marking goal as incomplete:', error)
@@ -613,9 +725,9 @@ function initializeDatabase() {
 
   ipcMain.handle('get-completed-goals', async () => {
     try {
-      console.log('main::index.js::ipcHandler::get-completed-goals::Getting completed goals...')
+      // console.log('main::index.js::ipcHandler::get-completed-goals::Getting completed goals...')
       const result = dbService.getCompletedGoals()
-      console.log('main::index.js::ipcHandler::get-completed-goals::Completed goals fetched:', result.length)
+      // console.log('main::index.js::ipcHandler::get-completed-goals::Completed goals fetched:', result.length)
       return result
     } catch (error) {
       console.error('main::index.js::ipcHandler::get-completed-goals::Error getting completed goals:', error)
@@ -626,9 +738,9 @@ function initializeDatabase() {
   // Time entry IPC handlers
   ipcMain.handle('get-time-entries', async (event, startDate, endDate) => {
     try {
-      console.log('main::index.js::ipcHandler::get-time-entries::Getting time entries...')
+      // console.log('main::index.js::ipcHandler::get-time-entries::Getting time entries...')
       const result = dbService.getTimeEntries(startDate, endDate)
-      console.log('main::index.js::ipcHandler::get-time-entries::Time entries fetched:', result.length)
+      // console.log('main::index.js::ipcHandler::get-time-entries::Time entries fetched:', result.length)
       return result
     } catch (error) {
       console.error('main::index.js::ipcHandler::get-time-entries::Error getting time entries:', error)
@@ -638,7 +750,7 @@ function initializeDatabase() {
 
   ipcMain.handle('create-time-entry', async (event, date, categoryId, durationHours, description) => {
     try {
-      console.log('main::index.js::ipcHandler::create-time-entry::Creating time entry for date:', date)
+      // console.log('main::index.js::ipcHandler::create-time-entry::Creating time entry for date:', date)
       return dbService.createTimeEntry(date, categoryId, durationHours, description)
     } catch (error) {
       console.error('main::index.js::ipcHandler::create-time-entry::Error creating time entry:', error)
@@ -648,7 +760,7 @@ function initializeDatabase() {
 
   ipcMain.handle('update-time-entry', async (event, id, date, categoryId, durationHours, description) => {
     try {
-      console.log('main::index.js::ipcHandler::update-time-entry::Updating time entry:', id)
+      // console.log('main::index.js::ipcHandler::update-time-entry::Updating time entry:', id)
       return dbService.updateTimeEntry(id, date, categoryId, durationHours, description)
     } catch (error) {
       console.error('main::index.js::ipcHandler::update-time-entry::Error updating time entry:', error)
@@ -658,7 +770,7 @@ function initializeDatabase() {
 
   ipcMain.handle('delete-time-entry', async (event, id) => {
     try {
-      console.log('main::index.js::ipcHandler::delete-time-entry::Deleting time entry:', id)
+      // console.log('main::index.js::ipcHandler::delete-time-entry::Deleting time entry:', id)
       return dbService.deleteTimeEntry(id)
     } catch (error) {
       console.error('main::index.js::ipcHandler::delete-time-entry::Error deleting time entry:', error)
@@ -669,9 +781,9 @@ function initializeDatabase() {
   // Statistics IPC handlers
   ipcMain.handle('get-category-stats', async (event, startDate, endDate) => {
     try {
-      console.log('main::index.js::ipcHandler::get-category-stats::Getting category stats...')
+      // console.log('main::index.js::ipcHandler::get-category-stats::Getting category stats...')
       const result = dbService.getCategoryStats(startDate, endDate)
-      console.log('main::index.js::ipcHandler::get-category-stats::Category stats fetched:', result.length)
+      // console.log('main::index.js::ipcHandler::get-category-stats::Category stats fetched:', result.length)
       return result
     } catch (error) {
       console.error('main::index.js::ipcHandler::get-category-stats::Error getting category stats:', error)
@@ -681,9 +793,9 @@ function initializeDatabase() {
 
   ipcMain.handle('get-productive-category-stats', async (event, startDate, endDate) => {
     try {
-      console.log('main::index.js::ipcHandler::get-productive-category-stats::Getting productive category stats...')
+      // console.log('main::index.js::ipcHandler::get-productive-category-stats::Getting productive category stats...')
       const result = dbService.getProductiveCategoryStats(startDate, endDate)
-      console.log('main::index.js::ipcHandler::get-productive-category-stats::Productive stats fetched:', result.length)
+      // console.log('main::index.js::ipcHandler::get-productive-category-stats::Productive stats fetched:', result.length)
       return result
     } catch (error) {
       console.error('main::index.js::ipcHandler::get-productive-category-stats::Error getting productive stats:', error)
@@ -693,9 +805,9 @@ function initializeDatabase() {
 
   ipcMain.handle('get-waste-time-stats', async (event, startDate, endDate) => {
     try {
-      console.log('main::index.js::ipcHandler::get-waste-time-stats::Getting waste time stats...')
+      // console.log('main::index.js::ipcHandler::get-waste-time-stats::Getting waste time stats...')
       const result = dbService.getWasteTimeStats(startDate, endDate)
-      console.log('main::index.js::ipcHandler::get-waste-time-stats::Waste time stats fetched:', result.length)
+      // console.log('main::index.js::ipcHandler::get-waste-time-stats::Waste time stats fetched:', result.length)
       return result
     } catch (error) {
       console.error('main::index.js::ipcHandler::get-waste-time-stats::Error getting waste time stats:', error)
@@ -705,9 +817,9 @@ function initializeDatabase() {
 
   ipcMain.handle('get-goal-progress', async () => {
     try {
-      console.log('main::index.js::ipcHandler::get-goal-progress::Getting goal progress...')
+      // console.log('main::index.js::ipcHandler::get-goal-progress::Getting goal progress...')
       const result = dbService.getGoalProgress()
-      console.log('main::index.js::ipcHandler::get-goal-progress::Goal progress fetched:', result.length)
+      // console.log('main::index.js::ipcHandler::get-goal-progress::Goal progress fetched:', result.length)
       return result
     } catch (error) {
       console.error('main::index.js::ipcHandler::get-goal-progress::Error getting goal progress:', error)
@@ -717,13 +829,88 @@ function initializeDatabase() {
 
   ipcMain.handle('get-streak-data', async () => {
     try {
-      console.log('main::index.js::ipcHandler::get-streak-data::Getting streak data...')
+      // console.log('main::index.js::ipcHandler::get-streak-data::Getting streak data...')
       const result = dbService.getStreakData()
-      console.log('main::index.js::ipcHandler::get-streak-data::Streak data fetched:', result)
+      // console.log('main::index.js::ipcHandler::get-streak-data::Streak data fetched:', result)
       return result
     } catch (error) {
       console.error('main::index.js::ipcHandler::get-streak-data::Error getting streak data:', error)
       return { currentStreak: 0, longestStreak: 0, totalActiveDays: 0 }
+    }
+  })
+
+  // Todo IPC handlers
+  ipcMain.handle('get-todos', async (event, startDate, endDate) => {
+    try {
+      // console.log('main::index.js::ipcHandler::get-todos::Getting todos...')
+      const result = dbService.getTodos(startDate, endDate)
+      // console.log('main::index.js::ipcHandler::get-todos::Todos fetched:', result.length)
+      return result
+    } catch (error) {
+      console.error('main::index.js::ipcHandler::get-todos::Error getting todos:', error)
+      return []
+    }
+  })
+
+  ipcMain.handle('get-todos-by-date', async (event, date) => {
+    try {
+      // console.log('main::index.js::ipcHandler::get-todos-by-date::Getting todos for date:', date)
+      const result = dbService.getTodosByDate(date)
+      // console.log('main::index.js::ipcHandler::get-todos-by-date::Todos fetched:', result.length)
+      return result
+    } catch (error) {
+      console.error('main::index.js::ipcHandler::get-todos-by-date::Error getting todos by date:', error)
+      return []
+    }
+  })
+
+  ipcMain.handle('create-todo', async (event, title, description, startDate, deadlineTime) => {
+    try {
+      // console.log('main::index.js::ipcHandler::create-todo::Creating todo:', title)
+      return dbService.createTodo(title, description, startDate, deadlineTime)
+    } catch (error) {
+      console.error('main::index.js::ipcHandler::create-todo::Error creating todo:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('update-todo', async (event, id, title, description, startDate, deadlineTime) => {
+    try {
+      // console.log('main::index.js::ipcHandler::update-todo::Updating todo:', id)
+      return dbService.updateTodo(id, title, description, startDate, deadlineTime)
+    } catch (error) {
+      console.error('main::index.js::ipcHandler::update-todo::Error updating todo:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('delete-todo', async (event, id) => {
+    try {
+      // console.log('main::index.js::ipcHandler::delete-todo::Deleting todo:', id)
+      return dbService.deleteTodo(id)
+    } catch (error) {
+      console.error('main::index.js::ipcHandler::delete-todo::Error deleting todo:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('mark-todo-completed', async (event, id) => {
+    try {
+      // console.log('main::index.js::ipcHandler::mark-todo-completed::Marking todo as completed:', id)
+      return dbService.markTodoCompleted(id)
+    } catch (error) {
+      console.error('main::index.js::ipcHandler::mark-todo-completed::Error marking todo as completed:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('mark-todo-incomplete', async (event, id) => {
+    try {
+      // console.log('main::index.js::ipcHandler::mark-todo-incomplete::Marking todo as incomplete:', id)
+      return dbService.markTodoIncomplete(id)
+    } catch (error) {
+      console.error('main::index.js::ipcHandler::mark-todo-incomplete::Error marking todo as incomplete:', error)
+      throw error
     }
   })
 }

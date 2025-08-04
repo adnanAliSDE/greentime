@@ -16,6 +16,11 @@ export const useAppStore = create((set, get) => ({
   timeEntries: [],
   loadingTimeEntries: false,
 
+  // Todos state
+  todos: [],
+  loadingTodos: false,
+  currentTodoDate: new Date(),
+
   // Statistics state
   categoryStats: [],
   productiveCategoryStats: [],
@@ -306,7 +311,111 @@ export const useAppStore = create((set, get) => ({
     } catch (error) {
       console.error('store::appStore::initializeApp::Initialization failed:', error)
     }
-  }
+  },
+
+  // Todo actions
+  setCurrentTodoDate: (date) => set({ currentTodoDate: date }),
+
+  fetchTodos: async (startDate = null, endDate = null) => {
+    const state = get()
+    if (state.loadingTodos) {
+      console.log('store::appStore::fetchTodos::Already loading, skipping...')
+      return
+    }
+
+    set({ loadingTodos: true })
+    try {
+      console.log('store::appStore::fetchTodos::Getting todos...', { startDate, endDate })
+      const todos = await window.api.getTodos(startDate, endDate)
+      console.log('store::appStore::fetchTodos::Todos fetched:', todos.length)
+      set({ todos, loadingTodos: false })
+    } catch (error) {
+      console.error('store::appStore::fetchTodos::Failed to fetch todos:', error)
+      set({ loadingTodos: false })
+    }
+  },
+
+  fetchTodosByDate: async (date) => {
+    const state = get()
+    if (state.loadingTodos) return
+
+    set({ loadingTodos: true })
+    try {
+      const dateStr = typeof date === 'string' ? date : date.toISOString().split('T')[0]
+      console.log('store::appStore::fetchTodosByDate::Getting todos for date:', dateStr)
+      const todos = await window.api.getTodosByDate(dateStr)
+      console.log('store::appStore::fetchTodosByDate::Todos fetched:', todos.length)
+      set({ todos, loadingTodos: false })
+    } catch (error) {
+      console.error('store::appStore::fetchTodosByDate::Failed to fetch todos:', error)
+      set({ loadingTodos: false })
+    }
+  },
+
+  createTodo: async (title, description, startDate, deadlineTime) => {
+    try {
+      await window.api.createTodo(title, description, startDate, deadlineTime)
+      // Refresh todos for current date
+      const state = get()
+      const currentDateStr = state.currentTodoDate.toISOString().split('T')[0]
+      await get().fetchTodosByDate(currentDateStr)
+    } catch (error) {
+      console.error('store::appStore::createTodo::Failed to create todo:', error)
+      throw error
+    }
+  },
+
+  updateTodo: async (id, title, description, startDate, deadlineTime) => {
+    try {
+      await window.api.updateTodo(id, title, description, startDate, deadlineTime)
+      // Refresh todos for current date
+      const state = get()
+      const currentDateStr = state.currentTodoDate.toISOString().split('T')[0]
+      await get().fetchTodosByDate(currentDateStr)
+    } catch (error) {
+      console.error('store::appStore::updateTodo::Failed to update todo:', error)
+      throw error
+    }
+  },
+
+  deleteTodo: async (id) => {
+    try {
+      await window.api.deleteTodo(id)
+      // Refresh todos for current date
+      const state = get()
+      const currentDateStr = state.currentTodoDate.toISOString().split('T')[0]
+      await get().fetchTodosByDate(currentDateStr)
+    } catch (error) {
+      console.error('store::appStore::deleteTodo::Failed to delete todo:', error)
+      throw error
+    }
+  },
+
+  markTodoCompleted: async (id) => {
+    try {
+      await window.api.markTodoCompleted(id)
+      // Refresh todos for current date
+      const state = get()
+      const currentDateStr = state.currentTodoDate.toISOString().split('T')[0]
+      await get().fetchTodosByDate(currentDateStr)
+    } catch (error) {
+      console.error('store::appStore::markTodoCompleted::Failed to mark todo as completed:', error)
+      throw error
+    }
+  },
+
+  markTodoIncomplete: async (id) => {
+    try {
+      await window.api.markTodoIncomplete(id)
+      // Refresh todos for current date
+      const state = get()
+      const currentDateStr = state.currentTodoDate.toISOString().split('T')[0]
+      await get().fetchTodosByDate(currentDateStr)
+    } catch (error) {
+      console.error('store::appStore::markTodoIncomplete::Failed to mark todo as incomplete:', error)
+      throw error
+    }
+  },
 }))
 
 // Date utilities store

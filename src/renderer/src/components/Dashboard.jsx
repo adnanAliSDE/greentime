@@ -67,7 +67,7 @@ const Dashboard = () => {
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
           <p className="text-gray-600 dark:text-gray-400 mt-1">
-            Welcome back beta Yasir! Your productivity overview.
+            Welcome back ! Your productivity overview.
           </p>
         </div>
 
@@ -167,7 +167,7 @@ const Dashboard = () => {
                         {entry.category_name}
                       </p>
                       <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {formatDate(entry.date)} • {entry.duration_hours}h
+                        {formatDate(entry.date)} • {entry.duration_hours.toFixed(2)}h
                       </p>
                     </div>
                     <div className="text-sm text-gray-600 dark:text-gray-400">

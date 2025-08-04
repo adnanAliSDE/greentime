@@ -7,7 +7,8 @@ import {
   BarChart3, 
   Moon, 
   Sun,
-  Clock
+  Clock,
+  CheckSquare
 } from 'lucide-react'
 
 const Sidebar = () => {
@@ -16,6 +17,7 @@ const Sidebar = () => {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'calendar', label: 'Calendar', icon: Calendar },
+    { id: 'todos', label: 'Todos', icon: CheckSquare },
     { id: 'goals', label: 'Goals', icon: Target },
     { id: 'categories', label: 'Categories', icon: Bookmark },
     { id: 'stats', label: 'Statistics', icon: BarChart3 }

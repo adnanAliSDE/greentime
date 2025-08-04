@@ -4,7 +4,7 @@ import Sidebar from './components/Sidebar'
 
 import Dashboard from './components/Dashboard'
 import CalendarView from './components/CalendarView'
-
+import TodosView from './components/TodosView'
 import GoalsView from './components/GoalsView'
 import CategoriesView from './components/CategoriesView'
 
@@ -36,6 +36,8 @@ function App() {
         return <Dashboard />
       case 'calendar':
         return <CalendarView />
+      case 'todos':
+        return <TodosView />
       case 'goals':
         return <GoalsView />
       case 'categories':
