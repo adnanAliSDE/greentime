@@ -60,7 +60,7 @@ GreenTime is a modern, Windows-optimized desktop time tracking application built
 
 1. Clone the repository:
    ```bash
-   git clone [<repository-url>](https://github.com/adnanAliSDE/greentime/)
+   git clone https://github.com/adnanAliSDE/greentime/
    cd greentime
    ```
 
